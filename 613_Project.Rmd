@@ -1,0 +1,158 @@
+---
+title: "613_Project"
+author: "Yicheng Wang"
+date: "2022/9/26"
+output: html_document
+---
+
+```{r setup, message = FALSE, error=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidytext)
+library(SnowballC)
+library(wordcloud)
+library(cmu.textstat)
+library(quanteda)
+library(quanteda.textstats)
+library(dplyr)
+```
+
+```{r}
+youtube <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-02/youtube.csv')
+youtube <- youtube %>% 
+  drop_na(names(youtube)) %>% 
+  select(-id, -kind, -etag, -thumbnail, -favorite_count, -superbowl_ads_dot_com_url, -youtube_url)
+youtube[,3:9] <- ifelse(youtube[,3:9] == TRUE, 1, 0)
+```
+
+
+
+
+**[Are there any keywords like football celebrity that are mentioned frequently in ads’ titles and descriptions?]**
+
+
+# Description
+
+```{r}
+# Select column of description that we want to look into
+ads.des.table <- youtube %>% 
+  dplyr::select(brand, description)
+```
+
+## Preprocess the texts
+
+```{r}
+# Convert descriptions to lower cases before tokenizing them
+ads.des.table$description <- tolower(ads.des.table$description)
+
+# Tokenization by removing punctuation, url, and number
+des.token <- tokens(ads.des.table$description, what = "word", remove_punct = TRUE, remove_url = TRUE, remove_numbers = TRUE)
+
+# Initiate a tibble for first brand descrption to make a one-token-per-document-per-row table
+tok <- tibble(brand = rep(ads.des.table$brand[1], length(des.token[[1]])), word = des.token[[1]])
+
+# Loop for the rest of the descriptions to get whole one-token-per-document-per-row table
+for (i in 2:length(des.token)) {
+  tok <- tok %>% add_row(brand = rep(ads.des.table$brand[i], length(des.token[[i]])), word = des.token[[i]])
+}
+
+# Load stop words
+data("stop_words")
+
+# Remove all stop words
+tidy.des.token <- tok %>% 
+  filter(!(word %in% stop_words$word)) %>% 
+  filter(!(word %in% c("super", "bowl", "superbowl", "commercial", 
+                       "commercials", "ad", "ads")))
+
+
+# Count frequency of words
+token.summary <- tidy.des.token %>% 
+  group_by(word) %>% 
+  count() %>% 
+  ungroup()
+
+# Sort the tokens by frequency
+token.summary <- arrange(token.summary, desc(n))
+```
+
+## Visualize in Word Cloud
+```{r}
+wordcloud(words = token.summary$word, freq = token.summary$n,
+          random.order = FALSE,
+          max.words = 100,
+          colors = brewer.pal(8, "Dark2"))
+```
+
+
+```{r}
+# tf-idf for brand
+brand.token.summary <- tidy.des.token %>%
+  group_by(brand, word) %>% 
+  count() %>% 
+  ungroup() %>% 
+  bind_tf_idf(word, brand, n)
+```
+
+```{r}
+# Display top 10 stems sorted by TF-IDF for Kia, Doritos, Bud Light and Hynudai
+brand.token.summary %>% 
+  filter(brand %in% c("NFL", "Bud Light")) %>% 
+  group_by(brand) %>% 
+  slice_max(tf_idf, n = 20) %>% 
+  ungroup() %>% 
+  mutate(word = reorder_within(word, tf_idf, brand)) %>% 
+  ggplot(aes(y = tf_idf, x = word),
+         fill = "darkblue",
+         alpha = 0.5) +
+  geom_col() + 
+  coord_flip() +
+  scale_x_reordered() +
+  facet_wrap(~ brand, ncol = 2, scales = "free") +
+  labs(y = "TF-IDF", x = NULL, title = "Top 20 TF-IDF Words for Bud Light and NFL")
+```
+
+
+
+
+```{r}
+library(ggplot2)
+library(reshape2)
+
+df <- data.frame(Type = c("a", "b", "c", "d", "e", "f","g","h","i"),
+             Value1 = c(1, 32, 63, 94, 125, 156,187,218,249),
+             Value2 = c(125, 5, 125, 76, 3, 125,3,2,100),
+             Total = c(126,37,188,170,128,281,190,220,349))
+
+df.m <- melt(df,id.vars = "Type")
+
+plot <- ggplot(df.m, aes(x = Type, y = value,fill=variable)) +
+        geom_bar(stat='identity')
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
